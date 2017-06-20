@@ -1,0 +1,27 @@
+﻿<?xml version="1.0"?>
+<package>
+  <metadata>
+    <id>PSModuleInstaller.extension</id>
+    <title>PSModuleInstaller.extension (Chocolatey Extension)</title>
+    <version>$version$</version>
+    <authors>Bryan Matthews</authors>
+    <owners>Bryan Matthews</owners>
+    <licenseUrl>https://opensource.org/licenses/MIT</licenseUrl>
+    <projectUrl>https://github.com/vc3/PSModuleInstaller.extension</projectUrl>
+    <iconUrl>https://github.com/chocolatey/chocolatey/raw/master/docs/logo/chocolateyicon.gif</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A Chocolatey extension that supports installing and uninstalling PowerShell modules from a Chocolatey package.".</description>
+        <releaseNotes>
+### Added
+- Initial version of `Install-ChocolateyPowerShellModule` and `Uninstall-ChocolateyPowerShellModule`.
+</releaseNotes>
+    <dependencies>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+    <file src="..\ChangeLog.md" target="content\ChangeLog.md" />
+    <file src="..\license.txt" target="content\license.txt" />
+    <file src="..\README.md" target="content\README.md" />
+  </files>
+</package>
