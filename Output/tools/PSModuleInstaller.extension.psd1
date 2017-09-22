@@ -12,7 +12,7 @@
 RootModule = 'PSModuleInstaller.extension.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.2.1'
+ModuleVersion = '0.2.2'
 
 # ID used to uniquely identify this module
 GUID = 'bdb3a90f-3273-728d-d098-9eaf98facb00'

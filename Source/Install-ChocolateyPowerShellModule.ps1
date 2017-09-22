@@ -53,7 +53,13 @@ $moduleFoldersToDelete = @()
 
 if ($PSCmdlet.ParameterSetName -eq 'UseLocalFiles') {
     $LocalModule = Resolve-Module -ModuleName $Name -ModulesFolder $ModulesFolder
+    if (-not($LocalModule)) {
+        Write-Error "Didn't find local module '$($Name)' in folder '$($ModulesFolder)'."
+        return
+    }
+
     $Version = $LocalModule.Version
+
     Write-Verbose "Found local module $($Name)@$($Version) at path '$($LocalModule.Path)'."
 }
 
@@ -103,7 +109,7 @@ try {
 
         Write-Verbose "Expanding module package '$($filePath)'..."
 
-        Expand-ModulePackage $filePath -ModuleName $Name -DestinationPath $tempDir -Verbose -UnzipScript {
+        Expand-ModulePackage $filePath -ModuleName $Name -DestinationPath $tempDir -UnzipScript {
             Write-Host "Using chocolatey to unzip '$($Args[0])' into directory '$($Args[1])'..."
             Get-ChocolateyUnzip $Args[0] $Args[1]
         }

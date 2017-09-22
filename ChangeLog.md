@@ -2,6 +2,11 @@
 All notable changes to this project will be documented in [this file](http://keepachangelog.com/).
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.2.2] - 2017-09-22
+### Fixed
+- Handle case where local module is not found
+- Fix issue with `Resolve-Module` command
+
 ## [0.2.1] - 2017-09-22
 ### Added
 - Minor logging additions/tweaks

@@ -1,27 +1,27 @@
-################################################################################
-#  Resolve-Module v0.3.0                                                       #
-#  --------------------------------------------------------------------------  #
-#  Discover PowerShell modules in the NPM "require" style.                     #
-#  --------------------------------------------------------------------------  #
-#  Author(s): Bryan Matthews                                                   #
-#  Company: VC3, Inc.                                                          #
-#  --------------------------------------------------------------------------  #
-#  Change Log:                                                                 #
-#  [0.3.0] - 2017-09-21                                                        #
-#  Added:                                                                      #
-#  - Support installing from local directory path                              #
-#  - Support specifying and/or local vs. global search                         #
-#  - Support searching a specific folder                                       #
-#  - Support searching -only- user or machine scope                            #
-#  [0.2.0] - 2017-08-04                                                        #
-#  Fixed:                                                                      #
-#  - Use 'BindingVariable' in 'Import-LocalizedData' call                      #
-#  [0.1.0] - 2017-07-13                                                        #
-#  Added:                                                                      #
-#  - Support for finding and importing '.psm1' and '.psd1' files.              #
-#  - Support for finding module files in a nested version folder.              #
-################################################################################
 function Resolve-Module {
+    ################################################################################
+    #  Resolve-Module v0.3.0                                                       #
+    #  --------------------------------------------------------------------------  #
+    #  Discover PowerShell modules in the NPM "require" style.                     #
+    #  --------------------------------------------------------------------------  #
+    #  Author(s): Bryan Matthews                                                   #
+    #  Company: VC3, Inc.                                                          #
+    #  --------------------------------------------------------------------------  #
+    #  Change Log:                                                                 #
+    #  [0.3.0] - 2017-09-21                                                        #
+    #  Added:                                                                      #
+    #  - Support installing from local directory path                              #
+    #  - Support specifying and/or local vs. global search                         #
+    #  - Support searching a specific folder                                       #
+    #  - Support searching -only- user or machine scope                            #
+    #  [0.2.0] - 2017-08-04                                                        #
+    #  Fixed:                                                                      #
+    #  - Use 'BindingVariable' in 'Import-LocalizedData' call                      #
+    #  [0.1.0] - 2017-07-13                                                        #
+    #  Added:                                                                      #
+    #  - Support for finding and importing '.psm1' and '.psd1' files.              #
+    #  - Support for finding module files in a nested version folder.              #
+    ################################################################################
     [CmdletBinding(DefaultParameterSetName='SearchLocalAndGlobal')]
     param(
         [Alias('Name')]
