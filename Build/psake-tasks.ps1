@@ -28,6 +28,6 @@ task EnsureApiKey {
 	}
 }
 
-task Build -depends EnsureApiKey,Choco:BuildPackages
+task Build -depends EnsureApiKey,ModuleBuilder:Build,Choco:BuildPackages
 
 task Deploy -depends EnsureApiKey,Choco:DeployPackages

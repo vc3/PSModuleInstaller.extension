@@ -23,6 +23,130 @@ function ConvertTo-ApplicationArgument {
 	return "$($Value)"
 }
 
+function Expand-ModulePackage {
+	################################################################################
+	#  Expand-ModulePackage v0.1.0                                                 #
+	#  --------------------------------------------------------------------------  #
+	#  Extract a module package and clean up package files.                        #
+	#  --------------------------------------------------------------------------  #
+	#  Author(s): Bryan Matthews                                                   #
+	#  Company: VC3, Inc.                                                          #
+	#  --------------------------------------------------------------------------  #
+	#  Change Log:                                                                 #
+	#  [0.1.0] - 2017-09-21                                                        #
+	#  Added:                                                                      #
+	#  - Unzip via 'Expand-Archive' or custom script.                              #
+	#  - Delete 'package' and '_rels' folders.                                     #
+	#  - Delete '[Content_Types].xml' and '*.nuspec' files.                        #
+	################################################################################
+	function Expand-ModulePackage {
+	    [CmdletBinding()]
+	    param(
+	        [Alias('Path')]
+	        [Alias('FullName')]
+	        [Parameter(Mandatory=$true, Position=0, ValueFromPipelineByPropertyName=$true)]
+	        [string]$PackageFileName,
+	
+	        [Parameter(Mandatory=$true)]
+	        [string]$ModuleName,
+	
+	        [Parameter(Mandatory=$true)]
+	        [string]$DestinationPath,
+	
+	        [ScriptBlock]$UnzipScript,
+	
+	        [switch]$Force
+	    )
+	
+	    if (Test-Path $DestinationPath -Type Container) {
+	        if ($Force.IsPresent) {
+	            Write-Verbose "Removing destination directory '$($DestinationPath)'."
+	            Remove-Item $DestinationPath -Recurse -Force -Confirm:$false -EA 0 | Out-Null
+	            Remove-Item $DestinationPath -Recurse -Force -Confirm:$false | Out-Null
+	        } else {
+	            Write-Error "Destination path '$($DestinationPath)' already exists."
+	            return
+	        }
+	    }
+	
+	    $PackageFileExtension = [IO.Path]::GetExtension($PackageFileName)
+	
+	    if ($UnzipScript) {
+	        Write-Verbose "Running custom unzip script..."
+	        $unzipPath = & $UnzipScript $PackageFileName $DestinationPath
+	        if ($unzipPath) {
+	            if ($unzipPath -ne $DestinationPath) {
+	                Write-Warning "Custom script unzipped file into unexpected destination '$($unzipPath)'."
+	            }
+	        } else {
+	            Write-Error "Failed to unzip file '$($PackageFileName)' with custom script."
+	            return
+	        }
+	    } else {
+	        Write-Verbose "Searching for 'Expand-Archive' command."
+	
+	        $expandArchiveCommands = Get-Command 'Expand-Archive' -All -EA 0
+	
+	        if ($expandArchiveCommands) {
+	            if ($expandArchiveCommands -is [array]) {
+	                Write-Verbose "Found $($expandArchiveCommands.Count) 'Expand-Archive' commands."
+	            } else {
+	                Write-Verbose "Found 1 'Expand-Archive' command."
+	            }
+	
+	            if ($expandArchiveCommands | Where-Object { $_.Module -eq 'Microsoft.PowerShell.Archive' }) {
+	                Write-Verbose "Using 'Expand-Archive' command in module 'Microsoft.PowerShell.Archive'."
+	                $usingSystemUnzip = $true
+	                $unzipCmd = Get-Command 'Expand-Archive' -Module 'Microsoft.PowerShell.Archive'
+	            } else {
+	                Write-Verbose "Module 'Microsoft.PowerShell.Archive' is not present, using the first available 'Expand-Archive' command."
+	                $usingSystemUnzip = $false
+	                $unzipCmd = Get-Command 'Expand-Archive'
+	            }
+	
+	            # Expand-Archive will fail on extension other than .zip
+	            if ($usingSystemUnzip -and $PackageFileExtension -ne '.zip') {
+	                Write-Verbose "Renaming file to '.zip' to avoid error."
+	                $tmpFile = "$($env:TEMP)\$([guid]::NewGuid()).zip"
+	                Copy-Item $Path $tmpFile
+	                $PackageFileName = $tmpFile
+	            }
+	
+	            & $unzipCmd -Path $PackageFileName -DestinationPath $DestinationPath
+	        } else {
+	            Write-Error "Command 'Expand-Archive' does not exist."
+	        }
+	    }
+	
+	    if (-not(Test-Path $DestinationPath -Type Container)) {
+	        Write-Error "Destination path '$($DestinationPath)' does not exist after unzip operation."
+	        return
+	    }
+	
+	    Write-Verbose "Cleaning up unzipped module output..."
+	
+	    if (Test-Path "$($DestinationPath)\_rels") {
+	        Write-Verbose "Removing '_rels' folder."
+	        Remove-Item "$($DestinationPath)\_rels" -Recurse -Force -Confirm:$false | Out-Null
+	    }
+	
+	    if (Test-Path "$($DestinationPath)\package") {
+	        Write-Verbose "Removing 'package' folder."
+	        Remove-Item "$($DestinationPath)\package" -Recurse -Force -Confirm:$false | Out-Null
+	    }
+	
+	    if (Test-Path -LiteralPath "$($DestinationPath)\[Content_Types].xml") {
+	        Write-Verbose "Removing '[Content_Types].xml' file."
+	        Remove-Item -LiteralPath "$($DestinationPath)\[Content_Types].xml" -Force -Confirm:$false | Out-Null
+	    }
+	
+	    if (Test-Path "$($DestinationPath)\$($ModuleName).nuspec") {
+	        Write-Verbose "Removing nuspec file."
+	        Remove-Item "$($DestinationPath)\$($ModuleName).nuspec" -Force -Confirm:$false | Out-Null
+	    }
+	}
+}
+
 function Get-Application {
 	[CmdletBinding(PositionalBinding=$false)]
 	param(
@@ -173,7 +297,7 @@ function Get-EnvironmentPath {
 }
 
 function Install-ChocolateyPowerShellModule {
-	[CmdletBinding()]
+	[CmdletBinding(DefaultParameterSetName='UseLocalFiles')]
 	param(
 	    [parameter(Mandatory=$false, Position=0)]
 	    [string]$PackageName = $env:chocolateyPackageName,
@@ -181,25 +305,26 @@ function Install-ChocolateyPowerShellModule {
 	    [Parameter(Mandatory=$true, Position=1)]
 	    [string]$Name,
 	
-	    [Parameter(Mandatory=$true, Position=2)]
+	    [Parameter(Mandatory=$true, Position=2, ParameterSetName='UseFileDownload')]
 	    [string]$Version = $env:chocolateyPackageVersion,
 	
-	    [Parameter(Mandatory=$true, Position=3)]
+	    [Parameter(Mandatory=$true, Position=2, ParameterSetName='UseLocalFiles')]
+	    [string]$ModulesFolder,
+	
+	    [Parameter(Mandatory=$true, Position=3, ParameterSetName='UseFileDownload')]
 	    [string]$Url ='',
-	
 	    [Alias("url64")]
-	    [Parameter(Mandatory=$false, Position=4)]
+	    [Parameter(Mandatory=$false, Position=4, ParameterSetName='UseFileDownload')]
 	    [string]$Url64bit = '',
-	
-	    [Parameter(Mandatory=$false)]
+	    [Parameter(Mandatory=$false, ParameterSetName='UseFileDownload')]
 	    [string] $Checksum = '',
-	    [Parameter(Mandatory=$false)]
+	    [Parameter(Mandatory=$false, ParameterSetName='UseFileDownload')]
 	    [string] $ChecksumType = '',
-	    [Parameter(Mandatory=$false)]
+	    [Parameter(Mandatory=$false, ParameterSetName='UseFileDownload')]
 	    [string] $Checksum64 = '',
-	    [Parameter(Mandatory=$false)]
+	    [Parameter(Mandatory=$false, ParameterSetName='UseFileDownload')]
 	    [string] $ChecksumType64 = '',
-	    [Parameter(Mandatory=$false)]
+	    [Parameter(Mandatory=$false, ParameterSetName='UseFileDownload')]
 	    [hashtable] $Options = @{Headers=@{}},
 	
 	    [switch]$Force = $($env:ChocolateyForce -and $env:ChocolateyForce -eq 'True'),
@@ -213,91 +338,92 @@ function Install-ChocolateyPowerShellModule {
 	
 	Write-Debug "Checking for existing installation of module `'$Name`' "
 	
-	$moduleDirs = Get-EnvironmentPath -Name 'PSModulePath' -Persisted -Scope System
-	
-	$availableModules = [array](Get-Module -ListAvailable | Where-Object { $_.Name -eq $Name })
-	
 	$moduleFoldersToDelete = @()
 	
-	if ($availableModules.Count -gt 0) {
-	    foreach ($module in $availableModules) {
-	        if ($moduleDirs | Where-Object { $module.Path.StartsWith($_.Path, $true, [Globalization.CultureInfo]::CurrentCulture) }) {
-	            if ($module.Version -eq $Version) {
-	                if ($Force.IsPresent) {
-	                    $moduleFoldersToDelete += (Split-Path $module.Path -Parent)
-	                } else {
-	                    Write-Warning "Module '$($Name)' v$($Version) is already installed at '$($module.Path)'."
-	                    return
-	                }
+	if ($PSCmdlet.ParameterSetName -eq 'UseLocalFiles') {
+	    $LocalModule = Resolve-Module -ModuleName $Name -ModulesFolder $ModulesFolder
+	    $Version = $LocalModule.Version
+	    Write-Verbose "Found local module $($Name)@$($Version) at path '$($LocalModule.Path)'."
+	}
+	
+	$installedModules = [array](Resolve-Module $Name -Global -Scope 'System' -EA 0)
+	
+	if ($installedModules.Count -gt 0) {
+	    foreach ($module in $installedModules) {
+	        if ($module.Version -eq $Version) {
+	            if ($Force.IsPresent) {
+	                $moduleFoldersToDelete += (Split-Path $module.Path -Parent)
 	            } else {
-	                $moduleFolder = Split-Path $module.Path -Parent
-	                if ((Test-Path "$($moduleFolder)\.chocolateyModule") -or $Force.IsPresent) {
-	                    $moduleFoldersToDelete += (Split-Path $module.Path -Parent)
-	                } else {
-	                    Write-Error "Module '$($Name)' v$($Version) is currently installed at '$($module.Path)'."
-	                    return
-	                }
+	                Write-Warning "Module '$($Name)' v$($module.Version) is already installed at '$($module.Path)'."
+	                return
+	            }
+	        } else {
+	            $moduleFolder = Split-Path $module.Path -Parent
+	            if ((Test-Path "$($moduleFolder)\.chocolateyModule") -or $Force.IsPresent) {
+	                $moduleFoldersToDelete += (Split-Path $module.Path -Parent)
+	            } else {
+	                Write-Error "Module '$($Name)' v$($module.Version) is currently installed at '$($module.Path)'."
+	                return
 	            }
 	        }
 	    }
 	}
 	
-	$tempDir = "$($env:TEMP)\$([guid]::NewGuid())"
+	$moduleTargetDir = "$($env:ProgramFiles)\WindowsPowerShell\Modules"
+	
+	if ($PSVersionTable.PSVersion.Major -ge 5) {
+	    $moduleDestination = "$($moduleTargetDir)\$($Name)\$($Version)"
+	} else {
+	    $moduleDestination = "$($moduleTargetDir)\$($Name)"
+	}
+	
+	$tempDir = $null
+	$tempFile = $null
 	
 	try {
-	    $filePath = Get-ChocolateyWebFile $packageName "$($tempDir)\$($Name).$($Version).nupkg" $url $url64bit -checksum $checksum -checksumType $checksumType -checksum64 $checksum64 -checksumType64 $checksumType64 -Options $options
+	    if ($PSCmdlet.ParameterSetName -eq 'UseLocalFiles') {
+	        $SourcePath = Split-Path $LocalModule.Path -Parent
+	    } elseif ($PSCmdlet.ParameterSetName -eq 'UseFileDownload') {
+	        $tempFile = "$($env:TEMP)\$($Name).$($Version).nupkg"
 	
-	    try {
-	        $dirPath = Get-ChocolateyUnzip $filePath "$($tempDir)\$($Name).$($Version)"
+	        $filePath = Get-ChocolateyWebFile $packageName $tempFile $url $url64bit -checksum $checksum -checksumType $checksumType -checksum64 $checksum64 -checksumType64 $checksumType64 -Options $options
 	
-	        if (Test-Path "$($dirPath)\_rels") {
-	            Remove-Item "$($dirPath)\_rels" -Recurse -Force -Confirm:$false | Out-Null
+	        $tempDir = "$($env:TEMP)\$($Name).$($Version)"
+	
+	        Expand-ModulePackage $filePath -ModuleName $Name -DestinationPath $tempDir -UnzipScript {
+	            Get-ChocolateyUnzip $Args[0] $Args[1]
 	        }
 	
-	        if (Test-Path "$($dirPath)\[Content_Types].xml") {
-	            Remove-Item "$($dirPath)\[Content_Types].xml" -Force -Confirm:$false | Out-Null
-	        }
+	        $SourcePath = $tempDir
+	    }
 	
-	        $moduleTargetDir = "$($env:ProgramFiles)\WindowsPowerShell\Modules"
+	    foreach ($moduleFolder in $moduleFoldersToDelete) {
+	        Write-Host "Removing module files from '$($moduleFolder)'..."
+	        Remove-Item $moduleFolder -Recurse -Force -Confirm:$false | Out-Null
 	
-	        foreach ($moduleFolder in $moduleFoldersToDelete) {
-	            Write-Host "Removing module files from '$($moduleFolder)'..."
-	            Remove-Item $moduleFolder -Recurse -Force -Confirm:$false | Out-Null
-	
-	            $moduleParentFolder = Split-Path $moduleFolder -Parent
-	            if (-not($moduleDirs -contains $moduleParentFolder) -and -not(Get-ChildItem $moduleParentFolder)) {
+	        $moduleParentFolder = Split-Path $moduleFolder -Parent
+	        if ((Split-Path $moduleParentFolder -Leaf) -eq $Name) {
+	            if (-not(Get-ChildItem $moduleParentFolder)) {
 	                Write-Debug "Removing empty directory '$($moduleParentFolder)'..."
 	                Remove-Item $moduleParentFolder -Recurse -Force -Confirm:$false | Out-Null
 	            }
 	        }
-	
-	        Write-Host "Copying module files to '$($moduleTargetDir)\$($Name)\$($Version)'..."
-	        New-Item "$($moduleTargetDir)\$($Name)\$($Version)" -Type Directory | Out-Null
-	        Invoke-Application -Name 'robocopy' -Arguments "`"$dirPath`" `"$($moduleTargetDir)\$($Name)\$($Version)`" /MIR" -ReturnType 'Output' -AllowExitCodes @(0, 1) | Out-Null
-	
-	        "PackageName: $($PackageName)" | Out-File "$($moduleTargetDir)\$($Name)\$($Version)\.chocolateyModule" -Encoding UTF8
-	    } finally {
-	        if ($dirPath -and (Test-Path $dirPath)) {
-	            Remove-Item $dirPath -Recurse -Force -Confirm:$false | Out-Null
-	        }
-	
-	        if (Test-Path "$($tempDir)\$($Name).$($Version)") {
-	            Remove-Item "$($tempDir)\$($Name).$($Version)" -Recurse -Force -Confirm:$false | Out-Null
-	        }
 	    }
+	
+	    Write-Host "Copying module files to '$($moduleDestination)'..."
+	    New-Item $moduleDestination -Type Directory | Out-Null
+	    Invoke-Application -Name 'robocopy' -Arguments "`"$SourcePath`" `"$($moduleDestination)`" /MIR" -ReturnType 'Output' -AllowExitCodes @(0, 1) | Out-Null
 	} finally {
-	    if ($filePath -and (Test-Path $filePath)) {
-	        Remove-Item $filePath | Out-Null
-	    }
-	
-	    if (Test-Path "$($tempDir)\$($Name).$($Version).nupkg") {
-	        Remove-Item "$($tempDir)\$($Name).$($Version).nupkg" | Out-Null
-	    }
-	
-	    if (Test-Path $tempDir) {
+	    if ($tempDir -and (Test-Path $tempDir)) {
 	        Remove-Item $tempDir -Recurse -Force -Confirm:$false | Out-Null
 	    }
+	
+	    if ($tempFile -and (Test-Path $tempFile)) {
+	        Remove-Item $tempFile | Out-Null
+	    }
 	}
+	
+	"PackageName: $($PackageName)`r`nInstallDate: $([DateTime]::Now)" | Out-File "$($moduleDestination)\.chocolateyModule" -Encoding UTF8
 }
 
 function Invoke-Application {
@@ -398,6 +524,204 @@ function Invoke-Application {
 	    if ($ReturnType -eq "ExitCode") {
 	        return $process.ExitCode
 	    }
+	}
+}
+
+function Resolve-Module {
+	################################################################################
+	#  Resolve-Module v0.3.0                                                       #
+	#  --------------------------------------------------------------------------  #
+	#  Discover PowerShell modules in the NPM "require" style.                     #
+	#  --------------------------------------------------------------------------  #
+	#  Author(s): Bryan Matthews                                                   #
+	#  Company: VC3, Inc.                                                          #
+	#  --------------------------------------------------------------------------  #
+	#  Change Log:                                                                 #
+	#  [0.3.0] - 2017-09-21                                                        #
+	#  Added:                                                                      #
+	#  - Support installing from local directory path                              #
+	#  - Support specifying and/or local vs. global search                         #
+	#  - Support searching a specific folder                                       #
+	#  - Support searching -only- user or machine scope                            #
+	#  [0.2.0] - 2017-08-04                                                        #
+	#  Fixed:                                                                      #
+	#  - Use 'BindingVariable' in 'Import-LocalizedData' call                      #
+	#  [0.1.0] - 2017-07-13                                                        #
+	#  Added:                                                                      #
+	#  - Support for finding and importing '.psm1' and '.psd1' files.              #
+	#  - Support for finding module files in a nested version folder.              #
+	################################################################################
+	function Resolve-Module {
+	    [CmdletBinding(DefaultParameterSetName='SearchLocalAndGlobal')]
+	    param(
+	        [Alias('Name')]
+	        [Parameter(Mandatory=$true, Position=0)]
+	        [string]$ModuleName,
+	
+	        [Parameter(ParameterSetName='SearchLocal')]
+	        [string]$ModulesFolder,
+	
+	        [Parameter(ParameterSetName='SearchGlobal')]
+	        [switch]$Global,
+	
+	        [Parameter(ParameterSetName='SearchLocalAndGlobal')]
+	        [Parameter(ParameterSetName='SearchGlobal')]
+	        [ValidateSet('CurrentUser', 'System')]
+	        [string]$Scope
+	    )
+	
+	    Write-Verbose "Attempting to resolve module '$($ModuleName)'..."
+	
+	    if ($PSCmdlet.ParameterSetName -like 'SearchLocal*') {
+	        $localModules = @()
+	
+	        if (-not($ModulesFolder)) {
+	            if ($MyInvocation.PSScriptRoot) {
+	                Write-Verbose "Searching from script file '$($MyInvocation.PSCommandPath)..."
+	                $searchDir = $MyInvocation.PSScriptRoot
+	            } else {
+	                Write-Verbose "Searching from current working directory '$($PWD.Path)..."
+	                $searchDir = $PWD.Path
+	            }
+	
+	            $ModulesFolder = Join-Path $searchDir 'Modules'
+	        }
+	
+	        do {
+	            if (-not($ModulesFolder)) {
+	                $ModulesFolder = Join-Path $searchDir 'Modules'
+	            }
+	
+	            if (Test-Path ($ModulesFolder)) {
+	                Get-ChildItem $ModulesFolder | Where-Object { $_.PSIsContainer } | ForEach-Object {
+	
+	                    Write-Verbose "Searching '$($_.FullName)'..."
+	
+	                    $moduleVersion = $null
+	
+	                    Write-Verbose "Checking for module manifest in root folder..."
+	                    $moduleFile = Join-Path $_.FullName "$($ModuleName).psd1"
+	                    if (Test-Path $moduleFile) {
+	                        Import-LocalizedData -BindingVariable 'moduleManifest' -FileName "$($ModuleName).psd1" -BaseDirectory $_.FullName
+	                        $moduleVersion = $moduleManifest.ModuleVersion
+	                        Write-Verbose "Found module manifest for '$($ModuleName)' v$($moduleVersion)."
+	                    } else {
+	                        Write-Verbose "Checking for module file in root folder..."
+	                        $moduleFile = Join-Path $_.FullName "$($ModuleName).psm1"
+	                        if (Test-Path $moduleFile) {
+	                            Write-Verbose "Found module file for '$($ModuleName)'."
+	                        } else {
+	                            # NOTE: Check for a single *version* folder (simplification).
+	                            $versionFolder = $null
+	                            Write-Verbose "Looking for version folder..."
+	                            $children = [array](Get-ChildItem $_.FullName)
+	                            Write-Verbose "Found $($children.Count) children: $(($children | Select-Object -ExpandProperty Name) -join ', ')."
+	                            if (($children.Count -eq 1) -and $children[0].PSIsContainer) {
+	                                try {
+	                                    [System.Version]::Parse($children[0].Name) | Out-Null
+	                                    $versionFolder = $children[0]
+	                                } catch {
+	                                    # Not a version, do nothing
+	                                    Write-Verbose "Unable to parse '$($children[0].Name)' as a .NET version."
+	                                }
+	                            }
+	
+	                            if ($versionFolder) {
+	                                Write-Verbose "Checking for module manifest in '$($versionFolder.Name)' folder..."
+	                                $moduleFile = Join-Path $versionFolder.FullName "$($ModuleName).psd1"
+	                                if (Test-Path $moduleFile) {
+	                                    Write-Verbose "Found module manifest for '$($ModuleName)'."
+	                                } else {
+	                                    Write-Verbose "Module manifest couldn't be found in version folder."
+	                                    $moduleFile = $null
+	                                }
+	                            } else {
+	                                Write-Verbose "No version folder was found."
+	                                $moduleFile = $null
+	                            }
+	                        }
+	                    }
+	
+	                    if ($moduleFile) {
+	                        Write-Verbose "Found module '$($ModuleName)' at '$($moduleFile)'."
+	
+	                        $module = New-Object 'PSObject'
+	
+	                        $module | Add-Member -Type 'NoteProperty' -Name 'Name' -Value $ModuleName
+	                        $module | Add-Member -Type 'NoteProperty' -Name 'Version' -Value $moduleVersion
+	                        $module | Add-Member -Type 'NoteProperty' -Name 'Path' -Value $moduleFile
+	
+	                        $localModules += $module
+	                    }
+	                }
+	
+	                if ($localModules.Count -gt 0) {
+	                    Write-Output $localModules
+	                    return;
+	                }
+	
+	                $searchDir = $null
+	            } elseif ($searchDir) {
+	                $searchDir = Split-Path $searchDir -Parent
+	            }
+	        } while ($searchDir)
+	    }
+	
+	    if ($PSCmdlet.ParameterSetName -like 'Search*Global') {
+	        Write-Verbose "Attempting to find global '$($ModuleName)' module on the %PSModulePath%..."
+	
+	        $candidateRootPaths = $null
+	
+	        if ($Scope -eq 'System') {
+	            $candidateRootPaths = @()
+	
+	            $candidateRootPaths += "$($env:ProgramFiles)\WindowsPowerShell\Modules"
+	
+	            $systemValue = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine')
+	            if ($systemValue) {
+	                $candidateRootPaths += $systemValue.Split(@(';'), 'RemoveEmptyEntries')
+	            }
+	
+	            Write-Verbose "Using candidate root paths '$($candidateRootPaths -join ';')'."
+	        } elseif ($Scope -eq 'CurrentUser') {
+	            $candidateRootPaths = @()
+	
+	            $candidateRootPaths += "$(Split-Path $PROFILE -Parent)\Modules"
+	
+	            $userValue = [Environment]::GetEnvironmentVariable('PSModulePath', 'User')
+	            if ($userValue) {
+	                $systemValues = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine').Split(@(';'), 'RemoveEmptyEntries')
+	                $candidateRootPaths += $userValue.Split(@(';'), 'RemoveEmptyEntries') | Where-Object { -not($systemValues -contains $_) }
+	            }
+	
+	            Write-Verbose "Using candidate root paths '$($candidateRootPaths -join ';')'."
+	        }
+	
+	        $globalModules = @()
+	
+	        Get-Module -Name $ModuleName -ListAvailable | ForEach-Object {
+	            $moPath = $_.Path
+	
+	            if (-not($candidateRootPaths) -or ($candidateRootPaths | Where-Object { $moPath.StartsWith($_, $true, [Globalization.CultureInfo]::CurrentCulture) })) {
+	                Write-Verbose "Found installed module '$($ModuleName)' at '$($_.Path)'."
+	
+	                $module = New-Object 'PSObject'
+	
+	                $module | Add-Member -Type 'NoteProperty' -Name 'Name' -Value $ModuleName
+	                $module | Add-Member -Type 'NoteProperty' -Name 'Version' -Value $_.Version
+	                $module | Add-Member -Type 'NoteProperty' -Name 'Path' -Value $_.Path
+	
+	                $globalModules += $module
+	            }
+	        }
+	
+	        if ($globalModules.Count -gt 0) {
+	            Write-Output $globalModules
+	            return
+	        }
+	    }
+	
+	    Write-Error "Couldn't resolve module '$($ModuleName)'."
 	}
 }
 
