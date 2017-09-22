@@ -1,19 +1,19 @@
-################################################################################
-#  Expand-ModulePackage v0.1.0                                                 #
-#  --------------------------------------------------------------------------  #
-#  Extract a module package and clean up package files.                        #
-#  --------------------------------------------------------------------------  #
-#  Author(s): Bryan Matthews                                                   #
-#  Company: VC3, Inc.                                                          #
-#  --------------------------------------------------------------------------  #
-#  Change Log:                                                                 #
-#  [0.1.0] - 2017-09-21                                                        #
-#  Added:                                                                      #
-#  - Unzip via 'Expand-Archive' or custom script.                              #
-#  - Delete 'package' and '_rels' folders.                                     #
-#  - Delete '[Content_Types].xml' and '*.nuspec' files.                        #
-################################################################################
 function Expand-ModulePackage {
+    ################################################################################
+    #  Expand-ModulePackage v0.1.0                                                 #
+    #  --------------------------------------------------------------------------  #
+    #  Extract a module package and clean up package files.                        #
+    #  --------------------------------------------------------------------------  #
+    #  Author(s): Bryan Matthews                                                   #
+    #  Company: VC3, Inc.                                                          #
+    #  --------------------------------------------------------------------------  #
+    #  Change Log:                                                                 #
+    #  [0.1.0] - 2017-09-21                                                        #
+    #  Added:                                                                      #
+    #  - Unzip via 'Expand-Archive' or custom script.                              #
+    #  - Delete 'package' and '_rels' folders.                                     #
+    #  - Delete '[Content_Types].xml' and '*.nuspec' files.                        #
+    ################################################################################
     [CmdletBinding()]
     param(
         [Alias('Path')]
@@ -32,6 +32,8 @@ function Expand-ModulePackage {
         [switch]$Force
     )
 
+    Write-Verbose "Expanding module package '$($PackageFileName)'..."
+
     if (Test-Path $DestinationPath -Type Container) {
         if ($Force.IsPresent) {
             Write-Verbose "Removing destination directory '$($DestinationPath)'."
@@ -44,6 +46,8 @@ function Expand-ModulePackage {
     }
 
     $PackageFileExtension = [IO.Path]::GetExtension($PackageFileName)
+
+    Write-Verbose "Package file extension is '$($PackageFileExtension)'."
 
     if ($UnzipScript) {
         Write-Verbose "Running custom unzip script..."

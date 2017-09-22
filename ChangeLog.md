@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in [this file](http://keepachangelog.com/).
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [0.2.1] - 2017-09-22
+### Added
+- Minor logging additions/tweaks
+### Fixed
+- Fix issue with `Expand-ModulePackage` command
+
 ## [0.2.0] - 2017-09-22
 ### Added
 - Support installing from local directory path
