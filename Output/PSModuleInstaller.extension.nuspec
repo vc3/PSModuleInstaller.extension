@@ -12,8 +12,9 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>A Chocolatey extension that supports installing and uninstalling PowerShell modules from a Chocolatey package.".</description>
         <releaseNotes>
-### Added
-- Initial version of `Install-ChocolateyPowerShellModule` and `Uninstall-ChocolateyPowerShellModule`.
+## [0.2.3] - Friday, Oct 13, 2017
+### Fixed
+- Use 'Get-Module' directly when checking for globally installed module.
 </releaseNotes>
     <dependencies>
     </dependencies>

@@ -333,7 +333,7 @@ function Install-ChocolateyPowerShellModule {
 	    Write-Verbose "Found local module $($Name)@$($Version) at path '$($LocalModule.Path)'."
 	}
 	
-	$installedModules = [array](Resolve-Module $Name -Global -Scope 'System' -EA 0)
+	$installedModules = [array](Get-Module $Name -ListAvailable -EA 0)
 	
 	if ($installedModules.Count -gt 0) {
 	    foreach ($module in $installedModules) {

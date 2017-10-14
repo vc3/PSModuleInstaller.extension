@@ -63,7 +63,7 @@ if ($PSCmdlet.ParameterSetName -eq 'UseLocalFiles') {
     Write-Verbose "Found local module $($Name)@$($Version) at path '$($LocalModule.Path)'."
 }
 
-$installedModules = [array](Resolve-Module $Name -Global -Scope 'System' -EA 0)
+$installedModules = [array](Get-Module $Name -ListAvailable -EA 0)
 
 if ($installedModules.Count -gt 0) {
     foreach ($module in $installedModules) {
@@ -84,6 +84,8 @@ if ($installedModules.Count -gt 0) {
             }
         }
     }
+} else {
+    Write-Verbose "Found $($installedModules.Count) installed modules with the name '$($Name)'."
 }
 
 $moduleTargetDir = "$($env:ProgramFiles)\WindowsPowerShell\Modules"
